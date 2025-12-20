@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reminders - Medication Tracker</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="page-title">
+      <h1>Today's Reminders</h1>
+      <p class="page-subtitle" id="dateDisplay"></p>
+    </div>
+
+    <div id="remindersContainer" class="reminders-container">
+      <div class="loading">
+        <i class="fa-solid fa-spinner"></i>
+        <p>Loading reminders...</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-item" onclick="window.location.href='dashboard.html'">
+      <i class="fa-solid fa-house"></i>
+      <span>Dashboard</span>
+    </div>
+    <div class="nav-item" onclick="window.location.href='prescriptions.html'">
+      <i class="fa-solid fa-file-prescription"></i>
+      <span>Prescriptions</span>
+    </div>
+    <div class="nav-item active" id="remindersNavItem" onclick="window.location.href='reminders.html'">
+      <i class="fa-solid fa-bell"></i>
+      <span>Reminders</span>
+    </div>
+    <div class="nav-item" onclick="window.location.href='profile.html'">
+      <i class="fa-solid fa-user"></i>
+      <span>Profile</span>
+    </div>
+  </nav>
+
+  <script src="../js/app.js"></script>
+  <script>
+    // ============================================
+    // REMINDER REAL-TIME CHECK & "RING" LOGIC
+    // ============================================
+
+    // Keep the latest reminders in memory for time-based checks
+    let currentReminders = [];
+    let reminderCheckInterval = null;
+    const triggeredReminders = new Set(); // Avoid multiple rings for same reminder
+
+    function setupReminderChecker() {
+      // Clear any existing interval to avoid duplicates
+      if (reminderCheckInterval) {
+        clearInterval(reminderCheckInterval);
+      }
+
+      // Check every 30 seconds whether any reminder time has arrived
+      reminderCheckInterval = setInterval(checkDueReminders, 30 * 1000);
+
+      // Also do an immediate check once after loading
+      checkDueReminders();
+    }
+
+    function checkDueReminders() {
+      if (!Array.isArray(currentReminders) || currentReminders.length === 0) return;
+
+      const now = new Date();
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const currentTime = `${hours}:${minutes}`; // "HH:MM" to match reminder.time format
+
+      currentReminders.forEach(reminder => {
+        if (!reminder || !reminder.time) return;
+
+        // Skip if already taken or snoozed
+        if (reminder.taken || reminder.snoozed) return;
+
+        // Skip if we've already "rung" for this reminder
+        if (triggeredReminders.has(reminder._id)) return;
+
+        if (reminder.time === currentTime) {
+          triggerReminderAlert(reminder);
+          triggeredReminders.add(reminder._id);
+        }
+      });
+    }
+
+    function triggerReminderAlert(reminder) {
+      const medication = reminder.medicationId || {};
+      const message = `Time to take ${medication.name || 'your medication'} at ${formatTime(reminder.time)}.`;
+
+      // Try using browser notifications first
+      if ('Notification' in window) {
+        const showNotification = () => {
+          try {
+            new Notification('Medication Reminder', {
+              body: message
+            });
+          } catch (e) {
+            // Fallback if Notification API fails
+            alert(message);
+          }
+        };
+
+        if (Notification.permission === 'granted') {
+          showNotification();
+        } else if (Notification.permission !== 'denied') {
+          Notification.requestPermission().then(permission => {
+            if (permission === 'granted') {
+              showNotification();
+            } else {
+              alert(message);
+            }
+          });
+        } else {
+          // Permission explicitly denied – fallback
+          alert(message);
+        }
+      } else {
+        // Older browsers – simple alert
+        alert(message);
+      }
+    }
+
+    // Check authentication
+    if (!checkAuth()) {
+      // Will redirect to login
+    }
+
+    // STRICT: Only Patients can access Reminders
+    const role = getUserRole();
+    if (role !== 'Patient') {
+      showAlert('Access denied. Only patients can access Reminders.');
+      window.location.href = 'dashboard.html';
+    }
+
+    // Update date display
+    const today = new Date();
+    document.getElementById('dateDisplay').textContent = today.toLocaleDateString('en-US', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    // Load today's reminders
+    async function loadReminders() {
+      try {
+        const response = await apiCall('/reminders/today');
+        const reminders = response.data || [];
+        currentReminders = reminders;
+        renderReminders(reminders);
+        setupReminderChecker();
+      } catch (error) {
+        console.error('Error loading reminders:', error);
+        const container = document.getElementById('remindersContainer');
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">🔔</div>
+            <p>Error loading reminders</p>
+          </div>
+        `;
+      }
+    }
+
+    // Render reminders
+    function renderReminders(reminders) {
+      const container = document.getElementById('remindersContainer');
+
+      if (reminders.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">✅</div>
+            <p>No reminders for today</p>
+            <p style="font-size: 13px; margin-top: 8px;">All caught up!</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = reminders.map(reminder => {
+        const medication = reminder.medicationId || {};
+        const taken = reminder.taken;
+        const snoozed = reminder.snoozed;
+        const takenClass = taken ? 'active' : '';
+        const takenText = taken ? 'Taken' : (snoozed ? 'Snoozed' : 'Pending');
+        const reminderId = reminder._id;
+
+        return `
+          <div class="reminder-item">
+            <div class="reminder-info">
+              <div class="reminder-medication">
+                <i class="fa-solid fa-pills" style="color: var(--neon-green); margin-right: 8px;"></i>
+                ${medication.name || 'Unknown Medication'}
+              </div>
+              <div class="reminder-dosage">${medication.dosage || ''}</div>
+            </div>
+            <div class="reminder-actions">
+              <span class="reminder-time">${formatTime(reminder.time)}</span>
+              ${!taken ? `
+                <button class="snooze-btn" onclick="snoozeReminder('${reminderId}')" title="Snooze" type="button">
+                  <i class="fa-solid fa-clock"></i>
+                </button>
+              ` : ''}
+              <div class="toggle-switch ${takenClass}" onclick="handleToggleClick('${reminderId}', ${taken})" style="cursor: ${taken ? 'default' : 'pointer'}" role="button" tabindex="${taken ? '-1' : '0'}"></div>
+              <span style="font-size: 12px; color: var(--text-muted); font-weight: 500;">${takenText}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Handle toggle click (prevents double-clicks and handles taken state)
+    function handleToggleClick(reminderId, isTaken) {
+      if (!isTaken && reminderId) {
+        markTaken(reminderId);
+      }
+    }
+
+    // Mark as taken (PUT method as per spec)
+    async function markTaken(reminderId) {
+      if (!reminderId) {
+        showAlert('Invalid reminder ID');
+        return;
+      }
+      
+      try {
+        const response = await apiCall('/reminders/mark-taken', {
+          method: 'PUT',
+          body: JSON.stringify({ reminderId })
+        });
+        await loadReminders();
+        showSuccess('Medication marked as taken!');
+      } catch (error) {
+        console.error('Error marking reminder as taken:', error);
+        showAlert(error.message || 'Failed to update reminder');
+      }
+    }
+
+    // Snooze reminder (PUT method as per spec)
+    async function snoozeReminder(reminderId) {
+      if (!reminderId) {
+        showAlert('Invalid reminder ID');
+        return;
+      }
+      
+      try {
+        const response = await apiCall('/reminders/snooze', {
+          method: 'PUT',
+          body: JSON.stringify({ reminderId, snoozeMinutes: 15 })
+        });
+        await loadReminders();
+        showSuccess('Reminder snoozed for 15 minutes');
+      } catch (error) {
+        console.error('Error snoozing reminder:', error);
+        showAlert(error.message || 'Failed to snooze reminder');
+      }
+    }
+
+    // Initialize
+    loadReminders();
+  </script>
+</body>
+</html>

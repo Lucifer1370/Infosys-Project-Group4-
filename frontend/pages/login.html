@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Medication Tracker</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="auth-container">
+    <div class="auth-card">
+      <div class="auth-header">
+        <h1><i class="fa-solid fa-pills"></i> Medication Tracker</h1>
+        <p class="auth-subtitle">Manage your prescriptions and medications</p>
+      </div>
+
+      <div class="auth-tabs">
+        <button class="tab-btn active" id="signupTab">
+          <i class="fa-solid fa-user-plus"></i> Sign Up
+        </button>
+        <button class="tab-btn" id="loginTab">
+          <i class="fa-solid fa-sign-in-alt"></i> Login
+        </button>
+      </div>
+
+      <form id="authForm">
+        <div class="form-group" id="nameField">
+          <label>Full Name</label>
+          <input type="text" id="name" name="name" placeholder="Enter your full name" required>
+        </div>
+
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="email" name="email" placeholder="your.email@example.com" required>
+        </div>
+
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="password" name="password" placeholder="Enter your password" required>
+        </div>
+
+        <div class="role-select-group">
+          <label>Role</label>
+          <select id="roleSelect" name="role">
+            <option value="Patient">Patient</option>
+            <option value="Doctor">Doctor</option>
+            <option value="Pharmacist">Pharmacist</option>
+            <option value="Admin">Admin</option>
+          </select>
+        </div>
+
+        <div id="extraFields" class="extra-fields"></div>
+
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">
+          <span>Sign Up</span>
+          <i class="fa-solid fa-arrow-right"></i>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <script src="../js/app.js"></script>
+  <script>
+    let isLoginMode = false;
+    let currentRole = 'Patient';
+
+    // Check if already logged in
+    if (getAuthToken() && getCurrentUser()) {
+      window.location.href = 'dashboard.html';
+    }
+
+    // Tab switching
+    document.getElementById('signupTab').addEventListener('click', () => {
+      isLoginMode = false;
+      document.getElementById('signupTab').classList.add('active');
+      document.getElementById('loginTab').classList.remove('active');
+      const nameField = document.getElementById('nameField');
+      const nameInput = document.getElementById('name');
+      nameField.style.display = 'block';
+      nameInput.setAttribute('required', 'required'); // Add required when visible
+      document.getElementById('submitBtn').innerHTML = '<span>Sign Up</span> <i class="fa-solid fa-arrow-right"></i>';
+      renderExtraFields();
+    });
+
+    document.getElementById('loginTab').addEventListener('click', () => {
+      isLoginMode = true;
+      document.getElementById('loginTab').classList.add('active');
+      document.getElementById('signupTab').classList.remove('active');
+      const nameField = document.getElementById('nameField');
+      const nameInput = document.getElementById('name');
+      nameField.style.display = 'none';
+      nameInput.removeAttribute('required'); // Remove required when hidden
+      document.getElementById('extraFields').innerHTML = '';
+      document.getElementById('submitBtn').innerHTML = '<span>Login</span> <i class="fa-solid fa-arrow-right"></i>';
+    });
+
+    // Role selection
+    document.getElementById('roleSelect').addEventListener('change', (e) => {
+      currentRole = e.target.value;
+      renderExtraFields();
+    });
+
+    function renderExtraFields() {
+      const extraFields = document.getElementById('extraFields');
+      if (isLoginMode) {
+        extraFields.innerHTML = '';
+        return;
+      }
+
+      if (currentRole === 'Doctor') {
+        extraFields.innerHTML = `
+          <div class="form-group">
+            <label>Medical License Number</label>
+            <input type="text" id="doctorLicense" name="doctorLicense" placeholder="Enter license number" required>
+          </div>
+          <div class="form-group">
+            <label>Specialization</label>
+            <input type="text" id="specialization" name="specialization" placeholder="e.g., Cardiology" required>
+          </div>
+        `;
+      } else if (currentRole === 'Pharmacist') {
+        extraFields.innerHTML = `
+          <div class="form-group">
+            <label>Pharmacy License Number</label>
+            <input type="text" id="pharmacyLicenseNumber" name="pharmacyLicenseNumber" placeholder="Enter pharmacy license number" required>
+          </div>
+          <div class="form-group">
+            <label>Pharmacy Address</label>
+            <input type="text" id="pharmacyAddress" name="pharmacyAddress" placeholder="Enter pharmacy address" required>
+          </div>
+        `;
+      } else {
+        extraFields.innerHTML = '';
+      }
+    }
+
+    // Form submission
+    document.getElementById('authForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      // Remove required from hidden fields before validation to prevent browser validation error
+      const nameInput = document.getElementById('name');
+      if (isLoginMode) {
+        nameInput.removeAttribute('required');
+      } else {
+        nameInput.setAttribute('required', 'required');
+      }
+
+      const email = document.getElementById('email').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      if (!email || !password) {
+        showAlert('Please fill in all required fields');
+        return;
+      }
+
+      try {
+        if (isLoginMode) {
+          // Login
+          const response = await apiCall('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email, password })
+          });
+
+          // Store token and user with role
+          localStorage.setItem('authToken', response.token);
+          localStorage.setItem('currentUser', JSON.stringify(response.user));
+          
+          // Redirect based on role
+          window.location.href = 'dashboard.html';
+        } else {
+          // Sign Up
+          const name = document.getElementById('name').value.trim();
+          if (!name) {
+            showAlert('Please enter your name');
+            return;
+          }
+
+          const role = document.getElementById('roleSelect').value;
+
+          // Build registration data
+          const registerData = {
+            fullName: name,
+            email,
+            password,
+            role
+          };
+          
+          // Add Doctor-specific fields (MANDATORY)
+          if (role === 'Doctor') {
+            const license = document.getElementById('doctorLicense')?.value.trim();
+            const spec = document.getElementById('specialization')?.value.trim();
+            
+            if (!license || !spec) {
+              showAlert('Medical License Number and Specialization are required for Doctor registration');
+              return;
+            }
+            
+            registerData.medicalLicense = license;
+            registerData.specialization = spec;
+          }
+
+          // Add Pharmacy-specific fields (MANDATORY)
+          if (role === 'Pharmacist') {
+            const pharmacyLicense = document.getElementById('pharmacyLicenseNumber')?.value.trim();
+            const pharmacyAddress = document.getElementById('pharmacyAddress')?.value.trim();
+
+            if (!pharmacyLicense || !pharmacyAddress) {
+              showAlert('Pharmacy License Number and Address are required for Pharmacy registration');
+              return;
+            }
+
+            registerData.pharmacyLicenseNumber = pharmacyLicense;
+            registerData.address = pharmacyAddress;
+          }
+          
+          const response = await apiCall('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify(registerData)
+          });
+
+          // Store token and user with role
+          localStorage.setItem('authToken', response.token);
+          localStorage.setItem('currentUser', JSON.stringify(response.user));
+          
+          showSuccess('Sign up successful! Please login.');
+          document.getElementById('loginTab').click();
+        }
+      } catch (error) {
+        showAlert(error.message || 'An error occurred');
+      }
+    });
+
+    // Initial render
+    renderExtraFields();
+  </script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Medication Tracker</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="page-title">
+      <h1>Dashboard</h1>
+      <p class="page-subtitle">Welcome back! Choose an option below</p>
+    </div>
+
+    <div class="dashboard-grid">
+      <div class="dashboard-card" onclick="window.location.href='prescriptions.html'">
+        <div class="dashboard-icon">
+          <i class="fa-solid fa-file-prescription"></i>
+        </div>
+        <h3>Prescriptions</h3>
+        <p>Manage your prescriptions</p>
+      </div>
+
+      <div class="dashboard-card" onclick="window.location.href='medication.html'">
+        <div class="dashboard-icon">
+          <i class="fa-solid fa-pills"></i>
+        </div>
+        <h3>Medications</h3>
+        <p>Track your medications</p>
+      </div>
+
+      <div class="dashboard-card" onclick="window.location.href='reminders.html'">
+        <div class="dashboard-icon">
+          <i class="fa-solid fa-bell"></i>
+        </div>
+        <h3>Reminders</h3>
+        <p>Today's medication reminders</p>
+      </div>
+
+      <div class="dashboard-card" onclick="window.location.href='profile.html'">
+        <div class="dashboard-icon">
+          <i class="fa-solid fa-user"></i>
+        </div>
+        <h3>Profile</h3>
+        <p>View your profile</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-item active" onclick="window.location.href='dashboard.html'">
+      <i class="fa-solid fa-house"></i>
+      <span>Dashboard</span>
+    </div>
+    <div class="nav-item" onclick="window.location.href='prescriptions.html'">
+      <i class="fa-solid fa-file-prescription"></i>
+      <span>Prescriptions</span>
+    </div>
+    <div class="nav-item" onclick="window.location.href='reminders.html'">
+      <i class="fa-solid fa-bell"></i>
+      <span>Reminders</span>
+    </div>
+    <div class="nav-item" onclick="window.location.href='profile.html'">
+      <i class="fa-solid fa-user"></i>
+      <span>Profile</span>
+    </div>
+  </nav>
+
+  <script src="../js/app.js"></script>
+  <script>
+    // Check authentication
+    if (!checkAuth()) {
+      // Will redirect to login
+    }
+
+    // STRICT Role-based UI visibility
+    const role = getUserRole();
+    
+    // Hide Medication Tracker and Reminders for Doctors (Patient-only features)
+    if (role === 'Doctor') {
+      // Hide Medication Tracker card
+      const medicationCard = document.querySelector('.dashboard-card:nth-child(2)');
+      if (medicationCard) medicationCard.style.display = 'none';
+      
+      // Hide Reminders card
+      const remindersCard = document.querySelector('.dashboard-card:nth-child(3)');
+      if (remindersCard) remindersCard.style.display = 'none';
+      
+      // Hide Reminders from bottom navigation
+      const navItems = document.querySelectorAll('.nav-item');
+      if (navItems.length > 2) {
+        navItems[2].style.display = 'none'; // Reminders nav item
+      }
+    }
+    
+    // Only show Reminders for Patients
+    if (role !== 'Patient') {
+      const remindersNav = Array.from(document.querySelectorAll('.nav-item')).find(item => 
+        item.textContent.includes('Reminders')
+      );
+      if (remindersNav) remindersNav.style.display = 'none';
+    }
+
+    // Set active nav item
+    document.querySelectorAll('.nav-item').forEach(item => {
+      item.classList.remove('active');
+    });
+    document.querySelector('.nav-item').classList.add('active');
+  </script>
+</body>
+</html>
