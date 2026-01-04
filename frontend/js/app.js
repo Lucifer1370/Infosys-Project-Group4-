@@ -13,7 +13,7 @@ function decodeJWT(token) {
   try {
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
-    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function(c) {
+    const jsonPayload = decodeURIComponent(atob(base64).split('').map(function (c) {
       return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
     }).join(''));
     return JSON.parse(jsonPayload);
@@ -33,7 +33,7 @@ function getCurrentUser() {
       // If parse fails, try JWT
     }
   }
-  
+
   // Fallback to JWT token
   const token = getAuthToken();
   if (token) {
@@ -45,7 +45,7 @@ function getCurrentUser() {
       };
     }
   }
-  
+
   return null;
 }
 
@@ -58,7 +58,7 @@ function getUserRole() {
       return decoded.role;
     }
   }
-  
+
   // Fallback to localStorage
   const user = getCurrentUser();
   return user ? user.role : null;
@@ -90,7 +90,7 @@ async function apiCall(endpoint, options = {}) {
 
     return data;
   } catch (error) {
-    console.error('API Error:', error);
+    // console.error('API Error:', error); // specific error logging can be handled by the caller or a dedicated service
     throw error;
   }
 }
@@ -99,18 +99,23 @@ async function apiCall(endpoint, options = {}) {
 // NAVIGATION UTILITIES
 // ============================================
 function navigateTo(page) {
-  window.location.href = `pages/${page}.html`;
+  // Check if we are already in the 'pages' directory
+  if (window.location.pathname.includes('/pages/')) {
+    window.location.href = `${page}.html`;
+  } else {
+    window.location.href = `pages/${page}.html`;
+  }
 }
 
 function checkAuth() {
   const token = getAuthToken();
   const role = getUserRole();
-  
+
   if (!token || !role) {
     navigateTo('login');
     return false;
   }
-  
+
   return true;
 }
 
@@ -144,10 +149,10 @@ function formatTime(time) {
 function formatDate(dateString) {
   if (!dateString) return '';
   const date = new Date(dateString);
-  return date.toLocaleDateString('en-US', { 
-    year: 'numeric', 
-    month: 'short', 
-    day: 'numeric' 
+  return date.toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
   });
 }
 

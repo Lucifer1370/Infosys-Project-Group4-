@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="../css/style.css">
 </head>
+
 <body>
   <div class="container">
     <div class="page-title">
@@ -50,6 +52,10 @@
       <i class="fa-solid fa-bell"></i>
       <span>Reminders</span>
     </div>
+    <div class="nav-item" id="inventoryNav" onclick="window.location.href='inventory.html'" style="display: none;">
+      <i class="fa-solid fa-boxes-stacked"></i>
+      <span>Inventory</span>
+    </div>
     <div class="nav-item active" onclick="window.location.href='profile.html'">
       <i class="fa-solid fa-user"></i>
       <span>Profile</span>
@@ -68,6 +74,12 @@
     if (role !== 'Patient') {
       const remindersNav = document.getElementById('remindersNavItem');
       if (remindersNav) remindersNav.style.display = 'none';
+    }
+
+    // Show Inventory for Pharmacists/Admin
+    if (role === 'Pharmacist' || role === 'Admin') {
+      const inventoryNav = document.getElementById('inventoryNav');
+      if (inventoryNav) inventoryNav.style.display = 'flex';
     }
 
     // Load user profile
@@ -101,4 +113,5 @@
     loadProfile();
   </script>
 </body>
+
 </html>

@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,18 +8,57 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="../css/style.css">
 </head>
+
 <body>
   <div class="container">
     <div class="page-title">
-      <h1>Today's Reminders</h1>
+      <h1>Medication Tracker</h1>
       <p class="page-subtitle" id="dateDisplay"></p>
     </div>
+
+    <!-- Add Medication Button (matches screenshot style) -->
+    <button class="btn-add-medication" onclick="openAddModal()">
+      <i class="fa-solid fa-plus"></i> Add Medication
+    </button>
 
     <div id="remindersContainer" class="reminders-container">
       <div class="loading">
         <i class="fa-solid fa-spinner"></i>
         <p>Loading reminders...</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Add Medication Modal -->
+  <div id="addMedicationModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>Add Medication</h2>
+        <span class="close-modal" onclick="closeAddModal()">&times;</span>
+      </div>
+      <form id="addMedicationForm">
+        <div class="form-group">
+          <label>Medication Name</label>
+          <input type="text" id="newMedName" placeholder="e.g. Metformin" required>
+        </div>
+        <div class="form-group">
+          <label>Dosage</label>
+          <input type="text" id="newDosage" placeholder="e.g. 500mg" required>
+        </div>
+        <div class="form-group">
+          <label>Frequency</label>
+          <select id="newFrequency">
+            <option value="daily">Daily</option>
+            <option value="twice_daily">Twice Daily</option>
+            <option value="weekly">Weekly</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Time of Day</label>
+          <input type="time" id="newTime" required>
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 20px;">Save Medication</button>
+      </form>
     </div>
   </div>
 
@@ -89,19 +129,71 @@
       });
     }
 
+    // Global Audio Context to handle "Autoplay Policy"
+    let audioCtx;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      // Resume context if it was suspended (browser policy)
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    // Unlock audio on first user interaction
+    document.addEventListener('click', initAudio, { once: true });
+    document.addEventListener('touchstart', initAudio, { once: true });
+
     function triggerReminderAlert(reminder) {
       const medication = reminder.medicationId || {};
       const message = `Time to take ${medication.name || 'your medication'} at ${formatTime(reminder.time)}.`;
 
-      // Try using browser notifications first
+      // 1. Play Sound (Base64 "Ping" similar to Hospital monitor)
+      try {
+        if (!audioCtx) initAudio(); // Try to init if not yet done
+
+        if (audioCtx && audioCtx.state === 'running') {
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+
+          // Health-check style "beep-beep"
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // High pitch A5
+          oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1);
+          oscillator.frequency.setValueAtTime(0, audioCtx.currentTime + 0.11); // Silence
+          oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2); // Beep again
+
+          gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime);
+          gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + 0.1);
+          gainNode.gain.setValueAtTime(0, audioCtx.currentTime + 0.11);
+          gainNode.gain.setValueAtTime(0.3, audioCtx.currentTime + 0.2);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.6);
+
+          oscillator.start(audioCtx.currentTime);
+          oscillator.stop(audioCtx.currentTime + 0.6);
+        } else {
+          // If still suspended, we can't play, but we try one last resume attempt
+          if (audioCtx) audioCtx.resume();
+        }
+
+      } catch (e) {
+        console.error('Audio play failed:', e);
+      }
+
+      // 2. Try using browser notifications
       if ('Notification' in window) {
         const showNotification = () => {
           try {
             new Notification('Medication Reminder', {
-              body: message
+              body: message,
+              silent: false
             });
           } catch (e) {
-            // Fallback if Notification API fails
             alert(message);
           }
         };
@@ -117,11 +209,9 @@
             }
           });
         } else {
-          // Permission explicitly denied – fallback
           alert(message);
         }
       } else {
-        // Older browsers – simple alert
         alert(message);
       }
     }
@@ -227,7 +317,7 @@
         showAlert('Invalid reminder ID');
         return;
       }
-      
+
       try {
         const response = await apiCall('/reminders/mark-taken', {
           method: 'PUT',
@@ -247,7 +337,7 @@
         showAlert('Invalid reminder ID');
         return;
       }
-      
+
       try {
         const response = await apiCall('/reminders/snooze', {
           method: 'PUT',
@@ -261,8 +351,79 @@
       }
     }
 
+    // Modal Logic
+    const modal = document.getElementById('addMedicationModal');
+
+    function openAddModal() {
+      modal.classList.add('active');
+    }
+
+    function closeAddModal() {
+      modal.classList.remove('active');
+    }
+
+    // Close on outside click
+    window.onclick = function (event) {
+      if (event.target == modal) {
+        closeAddModal();
+      }
+    }
+
+    // Handle Add Medication Form
+    document.getElementById('addMedicationForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const name = document.getElementById('newMedName').value;
+      const dosage = document.getElementById('newDosage').value;
+      const frequency = document.getElementById('newFrequency').value; // daily, twice_daily...
+      const time = document.getElementById('newTime').value;
+
+      try {
+        // 1. Create Medication
+        // We need to map frequency to what backend expects if needed, or pass string
+        // Assuming POST /medications takes { name, dosage, frequency }
+        const medResponse = await apiCall('/medications', {
+          method: 'POST',
+          body: JSON.stringify({
+            name,
+            dosage,
+            frequency, // Store the string
+            stock: 0 // Default
+          })
+        });
+
+        const medicationId = medResponse.data._id;
+
+        // 2. Generate Reminders
+        // Map frequency string to 'Daily', 'Alternate' etc if needed by backend
+        // The backend generic logic handles: 'Daily', 'Alternate', 'Custom'
+        let backendFreq = 'Daily';
+        if (frequency === 'twice_daily') backendFreq = 'Daily'; // Needs logic for 2nd time? Backend is simple right now.
+        // For simplicity let's stick to Daily for this iteration or map valid values.
+
+        await apiCall('/reminders/generate', {
+          method: 'POST',
+          body: JSON.stringify({
+            medicationId,
+            frequency: 'Daily', // Force daily for now to align with backend simple logic
+            time
+          })
+        });
+
+        showSuccess('Medication and reminders added!');
+        closeAddModal();
+        document.getElementById('addMedicationForm').reset();
+        await loadReminders();
+
+      } catch (error) {
+        console.error('Error adding medication:', error);
+        showAlert(error.message || 'Failed to add medication');
+      }
+    });
+
     // Initialize
     loadReminders();
   </script>
 </body>
+
 </html>

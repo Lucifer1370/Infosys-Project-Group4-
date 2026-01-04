@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Inventory - Pharmacy Management</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../css/style.css">
+
+</head>
+
+<body>
+  <div class="container">
+    <div class="page-title">
+      <h1>Pharmacy Inventory</h1>
+      <p class="page-subtitle">Manage medicine stock and expiry</p>
+    </div>
+
+    <div class="prescriptions-layout">
+      <!-- Inventory Form (Left Side) -->
+      <div class="prescription-form-card" id="inventoryFormCard">
+        <h2 class="form-section-title">
+          <i class="fa-solid fa-pills"></i> Add Medicine
+        </h2>
+
+        <form id="inventoryForm">
+          <div class="form-group">
+            <label>Medicine Name</label>
+            <input type="text" id="name" placeholder="e.g., Paracetamol" required>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Batch No.</label>
+              <input type="text" id="batchNumber" placeholder="B123" required>
+            </div>
+            <div class="form-group">
+              <label>Manufacturer</label>
+              <input type="text" id="manufacturer" placeholder="Pharma Inc" required>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label>Price</label>
+              <input type="number" id="price" min="0" step="0.01" required>
+            </div>
+            <div class="form-group">
+              <label>Quantity</label>
+              <input type="number" id="quantity" min="0" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Expiry Date</label>
+            <input type="date" id="expiryDate" required>
+          </div>
+
+          <div class="form-group">
+            <label>Low Stock Threshold</label>
+            <input type="number" id="lowStockThreshold" value="10" min="1">
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary" id="saveBtn">
+              <i class="fa-solid fa-plus"></i> Add to Inventory
+            </button>
+            <button type="button" class="btn btn-secondary" id="resetBtn">
+              <i class="fa-solid fa-redo"></i> Reset
+            </button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Inventory List (Right Side) -->
+      <div style="flex: 1;">
+        <div class="search-filter-bar">
+          <div class="search-box">
+            <input type="text" id="searchBox" placeholder="Search medicines...">
+          </div>
+          <select id="filterStatus" class="filter-select">
+            <option value="all">All Items</option>
+            <option value="low_stock">Low Stock</option>
+            <option value="expired">Expired</option>
+            <option value="expiring_soon">Expiring Soon</option>
+          </select>
+        </div>
+
+        <div id="inventoryList" class="prescriptions-list">
+          <!-- Items will be loaded here -->
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <nav class="bottom-nav">
+    <div class="nav-item" onclick="window.location.href='dashboard.html'">
+      <i class="fa-solid fa-house"></i>
+      <span>Dashboard</span>
+    </div>
+    <!-- Only for Pharmacists, but visible here as this is their page -->
+    <div class="nav-item active">
+      <i class="fa-solid fa-boxes-stacked"></i>
+      <span>Inventory</span>
+    </div>
+    <div class="nav-item" onclick="window.location.href='prescriptions.html'">
+      <i class="fa-solid fa-file-prescription"></i>
+      <span>Prescriptions</span>
+    </div>
+    <div class="nav-item" onclick="window.location.href='profile.html'">
+      <i class="fa-solid fa-user"></i>
+      <span>Profile</span>
+    </div>
+  </nav>
+
+  <script src="../js/app.js"></script>
+  <script>
+    // Check authentication
+    if (!checkAuth()) {
+      // Redirect handled by app.js or logic here
+    }
+
+    // Role check
+    const role = getUserRole();
+    if (role !== 'Pharmacist' && role !== 'Admin') {
+      showAlert('Access denied. Pharmacist only.');
+      window.location.href = 'dashboard.html';
+    }
+
+    let inventoryItems = [];
+    let editingId = null;
+
+    // Load Inventory
+    async function loadInventory() {
+      try {
+        const response = await apiCall('/inventory');
+        inventoryItems = response.data || [];
+        renderInventory();
+      } catch (error) {
+        console.error('Error loading inventory:', error);
+        showAlert('Failed to load inventory');
+      }
+    }
+
+    // Render Inventory
+    function renderInventory() {
+      const container = document.getElementById('inventoryList');
+      const search = document.getElementById('searchBox').value.toLowerCase();
+      const filter = document.getElementById('filterStatus').value;
+
+      const filtered = inventoryItems.filter(item => {
+        const matchSearch = item.name.toLowerCase().includes(search) ||
+          item.batchNumber.toLowerCase().includes(search);
+
+        let matchFilter = true;
+        if (filter === 'low_stock') matchFilter = item.isLowStock;
+        if (filter === 'expired') matchFilter = item.isExpired;
+        if (filter === 'expiring_soon') matchFilter = item.isExpiringSoon;
+
+        return matchSearch && matchFilter;
+      });
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-state-icon">📦</div>
+            <p>No items found</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(item => {
+        const expiryDate = formatDate(item.expiryDate);
+        let badge = '<span class="badge-ok">In Stock</span>';
+
+        if (item.isExpired) {
+          badge = '<span class="badge-expired">Expired</span>';
+        } else if (item.isLowStock) {
+          badge = '<span class="badge-low-stock">Low Stock</span>';
+        } else if (item.isExpiringSoon) {
+          badge = '<span class="badge-low-stock">Expiring Soon</span>';
+        }
+
+        return `
+          <div class="medicine-card">
+            <div style="display: flex; justify-content: space-between; align-items: start;">
+              <div>
+                <div class="medicine-title">${item.name} <span style="font-size:0.8em; color:var(--text-muted)">(${item.batchNumber})</span></div>
+                <div class="medicine-dose">${item.manufacturer}</div>
+              </div>
+              <div>${badge}</div>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; font-size: 14px;">
+              <div><strong>Qty:</strong> ${item.quantity}</div>
+              <div><strong>Price:</strong> $${item.price}</div>
+              <div><strong>Expires:</strong> ${expiryDate}</div>
+              <div><strong>Threshold:</strong> ${item.lowStockThreshold}</div>
+            </div>
+
+            <div class="card-actions" style="margin-top: 15px;">
+              <button onclick="editItem('${item._id}')"><i class="fa-solid fa-edit"></i> Edit</button>
+              <button onclick="deleteItem('${item._id}')"><i class="fa-solid fa-trash"></i> Delete</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Add/Update Item
+    document.getElementById('inventoryForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const itemData = {
+        name: document.getElementById('name').value,
+        batchNumber: document.getElementById('batchNumber').value,
+        manufacturer: document.getElementById('manufacturer').value,
+        price: Number(document.getElementById('price').value),
+        quantity: Number(document.getElementById('quantity').value),
+        expiryDate: document.getElementById('expiryDate').value,
+        lowStockThreshold: Number(document.getElementById('lowStockThreshold').value)
+      };
+
+      try {
+        if (editingId) {
+          await apiCall(`/inventory/${editingId}`, {
+            method: 'PUT',
+            body: JSON.stringify(itemData)
+          });
+          showSuccess('Item updated');
+        } else {
+          await apiCall('/inventory', {
+            method: 'POST',
+            body: JSON.stringify(itemData)
+          });
+          showSuccess('Item added to inventory');
+        }
+
+        resetForm();
+        loadInventory();
+      } catch (error) {
+        showAlert(error.message || 'Operation failed');
+      }
+    });
+
+    // Edit Item
+    window.editItem = (id) => {
+      const item = inventoryItems.find(i => i._id === id);
+      if (!item) return;
+
+      editingId = id;
+      document.getElementById('name').value = item.name;
+      document.getElementById('batchNumber').value = item.batchNumber;
+      document.getElementById('manufacturer').value = item.manufacturer;
+      document.getElementById('price').value = item.price;
+      document.getElementById('quantity').value = item.quantity;
+      document.getElementById('expiryDate').value = item.expiryDate.split('T')[0];
+      document.getElementById('lowStockThreshold').value = item.lowStockThreshold;
+
+      document.getElementById('saveBtn').innerHTML = '<i class="fa-solid fa-save"></i> Update Item';
+      document.querySelector('.page-title').scrollIntoView({ behavior: 'smooth' });
+    };
+
+    // Delete Item
+    window.deleteItem = async (id) => {
+      if (!confirm('Are you sure you want to delete this item?')) return;
+
+      try {
+        await apiCall(`/inventory/${id}`, { method: 'DELETE' });
+        showSuccess('Item deleted');
+        loadInventory();
+      } catch (error) {
+        showAlert(error.message || 'Delete failed');
+      }
+    };
+
+    // Reset Form
+    function resetForm() {
+      document.getElementById('inventoryForm').reset();
+      editingId = null;
+      document.getElementById('saveBtn').innerHTML = '<i class="fa-solid fa-plus"></i> Add to Inventory';
+    }
+    document.getElementById('resetBtn').addEventListener('click', resetForm);
+
+    // Filter Listeners
+    document.getElementById('searchBox').addEventListener('input', renderInventory);
+    document.getElementById('filterStatus').addEventListener('change', renderInventory);
+
+    // Initial load
+    loadInventory();
+
+    // Search Functionality
+    document.getElementById('searchBox').addEventListener('input', (e) => {
+      const searchTerm = e.target.value.toLowerCase();
+      const filtered = inventoryItems.filter(item =>
+        item.name.toLowerCase().includes(searchTerm) ||
+        item.batchNumber.toLowerCase().includes(searchTerm)
+      );
+      renderInventory(filtered);
+    });
+  </script>
+</body>
+
+</html>

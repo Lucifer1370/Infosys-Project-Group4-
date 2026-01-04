@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - Medication Tracker</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="../css/style.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <div class="page-title">
+            <h1>Analytics & Reports</h1>
+            <p class="page-subtitle">Track performance and insights</p>
+        </div>
+
+        <!-- Stats Cards Container (Dynamic) -->
+        <div class="dashboard-grid" id="statsGrid">
+            <!-- Stats will be injected here -->
+        </div>
+
+        <!-- Charts Container -->
+        <div class="chart-container">
+            <canvas id="mainChart"></canvas>
+        </div>
+
+    </div>
+
+    <nav class="bottom-nav">
+        <div class="nav-item" onclick="window.location.href='dashboard.html'">
+            <i class="fa-solid fa-house"></i>
+            <span>Dashboard</span>
+        </div>
+        <div class="nav-item" id="remindersNavItem" onclick="window.location.href='reminders.html'">
+            <i class="fa-solid fa-bell"></i>
+            <span>Reminders</span>
+        </div>
+        <div class="nav-item" id="inventoryNav" onclick="window.location.href='inventory.html'" style="display: none;">
+            <i class="fa-solid fa-boxes-stacked"></i>
+            <span>Inventory</span>
+        </div>
+        <div class="nav-item active">
+            <i class="fa-solid fa-chart-line"></i>
+            <span>Analytics</span>
+        </div>
+        <div class="nav-item" onclick="window.location.href='profile.html'">
+            <i class="fa-solid fa-user"></i>
+            <span>Profile</span>
+        </div>
+    </nav>
+
+    <script src="../js/app.js"></script>
+    <script>
+        // Check authentication
+        if (!checkAuth()) {
+            // handled by app.js or logic here
+        }
+
+        const role = getUserRole();
+
+        // STRICT: Hide Reminders nav item for non-Patients
+        if (role !== 'Patient') {
+            const remindersNav = document.getElementById('remindersNavItem');
+            if (remindersNav) remindersNav.style.display = 'none';
+        }
+
+        // Show Inventory for Pharmacists/Admin
+        if (role === 'Pharmacist' || role === 'Admin') {
+            const inventoryNav = document.getElementById('inventoryNav');
+            if (inventoryNav) inventoryNav.style.display = 'flex';
+        }
+        let chartInstance = null;
+
+        async function loadAnalytics() {
+            try {
+                let endpoint = '';
+                if (role === 'Admin') endpoint = '/analytics/admin';
+                else if (role === 'Doctor') endpoint = '/analytics/doctor';
+                else if (role === 'Pharmacist') endpoint = '/analytics/pharmacy';
+                else if (role === 'Patient') endpoint = '/analytics/patient';
+                else return;
+
+                const response = await apiCall(endpoint);
+                const data = response.data;
+
+                renderStats(data);
+                renderChart(data);
+
+            } catch (error) {
+                console.error('Error loading analytics:', error);
+                showAlert('Failed to load analytics');
+            }
+        }
+
+        function renderStats(data) {
+            const grid = document.getElementById('statsGrid');
+            let html = '';
+
+            if (role === 'Admin') {
+                html += createStatCard('Total Users', data.users.total, 'fa-users', '#4a90e2');
+                html += createStatCard('Patients', data.users.patients, 'fa-procedures', '#50e3c2');
+                html += createStatCard('Doctors', data.users.doctors, 'fa-user-md', '#b8e986');
+                html += createStatCard('Prescriptions', data.activity.totalPrescriptions, 'fa-file-prescription', '#f5a623');
+            } else if (role === 'Doctor') {
+                html += createStatCard('Total Issued', data.totalIssued, 'fa-file-medical', '#4a90e2');
+                html += createStatCard('Active', data.active, 'fa-check-circle', '#50e3c2');
+            } else if (role === 'Pharmacist') {
+                html += createStatCard('Total Items', data.totalItems, 'fa-boxes', '#4a90e2');
+                html += createStatCard('Asset Value', '$' + data.totalValue.toLocaleString(), 'fa-dollar-sign', '#b8e986');
+                html += createStatCard('Low Stock', data.alerts.lowStock, 'fa-exclamation-triangle', '#f5a623');
+                html += createStatCard('Expired', data.alerts.expired, 'fa-times-circle', '#d0021b');
+            } else if (role === 'Patient') {
+                // NEW: Custom layout for Patient Analytics (Adherence Card + History)
+                // We overwrite the entire grid logic for this specific view
+                const container = document.querySelector('.container');
+                const adherenceRate = data.adherence.rate;
+                const history = data.history || [];
+
+                // 1. Create the Top "Adherence Trends" Card structure (this replaces the chart container later)
+                // We will inject the canvas into this card
+
+                // Clear the default grid and chart container for a custom full-page layout
+                grid.style.display = 'none'; // Hide default grid
+                document.querySelector('.chart-container').style.display = 'none'; // Hide default chart container
+
+                // Create Custom Container
+                const customLayout = document.createElement('div');
+                customLayout.id = 'patientAnalyticsLayout';
+
+                // --- Adherence Card ---
+                customLayout.innerHTML = `
+                    <div class="analytics-card">
+                        <div class="analytics-header">
+                            <div class="analytics-title">Medication Adherence</div>
+                            <div class="analytics-big-number">${adherenceRate}%</div>
+                            <div class="analytics-subtitle">Last 30 Days <span class="trend-positive">+5%</span></div>
+                        </div>
+                        <div style="height: 250px; width: 100%;">
+                            <canvas id="patientChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="history-section">
+                        <h2>Prescription History</h2>
+                        <div class="history-list">
+                            ${history.length > 0 ? history.map(item => `
+                                <div class="history-item">
+                                    <div class="history-icon-box">
+                                        <i class="fa-solid fa-pills"></i>
+                                    </div>
+                                    <div class="history-details">
+                                        <div class="history-name">${item.medicineName}</div>
+                                        <div class="history-date">${new Date(item.issuedDate).toLocaleDateString()}</div>
+                                    </div>
+                                </div>
+                            `).join('') : '<p style="color:var(--text-muted)">No history found</p>'}
+                        </div>
+                    </div>
+                `;
+
+                // Insert after page title
+                const pageTitle = document.querySelector('.page-title');
+                // Remove generic chart if it exists from previous renders
+                const existing = document.getElementById('patientAnalyticsLayout');
+                if (existing) existing.remove();
+
+                pageTitle.insertAdjacentElement('afterend', customLayout);
+
+                // Note: renderChart needs to target 'patientChart' now, not 'mainChart'
+            }
+
+            grid.innerHTML = html;
+        }
+
+        function createStatCard(title, value, icon, color) {
+            return `
+        <div class="dashboard-card" style="cursor: default;">
+          <div class="stat-card-icon" style="background-color: ${color}20; color: ${color};">
+            <i class="fa-solid ${icon}"></i>
+          </div>
+          <h3 class="stat-card-value">${value}</h3>
+          <p>${title}</p>
+        </div>
+      `;
+        }
+
+        function renderChart(data) {
+            // Determine which canvas to use
+            // For Patient, we created a dynamic 'patientChart' inside 'renderStats'
+            // For others, we use the static 'mainChart'
+            const patientCanvas = document.getElementById('patientChart');
+            const mainCanvas = document.getElementById('mainChart');
+
+            const ctx = (role === 'Patient' && patientCanvas) ? patientCanvas.getContext('2d') : mainCanvas.getContext('2d');
+
+            let config = {
+                type: 'bar',
+                data: { labels: [], datasets: [] },
+                options: { responsive: true }
+            };
+
+            if (role === 'Admin') {
+                config.type = 'doughnut';
+                config.data = {
+                    labels: ['Patients', 'Doctors', 'Pharmacists'],
+                    datasets: [{
+                        data: [data.users.patients, data.users.doctors, data.users.pharmacists],
+                        backgroundColor: ['#50e3c2', '#b8e986', '#f5a623']
+                    }]
+                };
+            } else if (role === 'Doctor') {
+                const labels = Object.keys(data.history);
+                const values = Object.values(data.history);
+                config.type = 'line';
+                config.data = {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Prescriptions Issued',
+                        data: values,
+                        borderColor: '#4a90e2',
+                        tension: 0.4,
+                        fill: true,
+                        backgroundColor: '#4a90e220'
+                    }]
+                };
+            } else if (role === 'Pharmacist') {
+                config.type = 'pie';
+                config.data = {
+                    labels: ['In Stock', 'Low Stock', 'Expired'],
+                    datasets: [{
+                        data: [
+                            data.totalItems - data.alerts.lowStock - data.alerts.expired,
+                            data.alerts.lowStock,
+                            data.alerts.expired
+                        ],
+                        backgroundColor: ['#50e3c2', '#f5a623', '#d0021b']
+                    }]
+                };
+            } else if (role === 'Patient') {
+                // NEW: Adherence Trends Line Chart
+                const trends = data.trends || [0, 0, 0, 0];
+                config.type = 'line';
+                config.data = {
+                    labels: ['Week 1', 'Week 2', 'Week 3', 'Week 4'],
+                    datasets: [{
+                        label: 'Adherence',
+                        data: trends,
+                        borderColor: '#00ff88', // Neon Green
+                        borderWidth: 3,
+                        tension: 0.4, // Smooth curves
+                        fill: true,
+                        backgroundColor: (context) => {
+                            const ctx = context.chart.ctx;
+                            const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                            gradient.addColorStop(0, 'rgba(0, 255, 136, 0.2)');
+                            gradient.addColorStop(1, 'rgba(0, 255, 136, 0)');
+                            return gradient;
+                        },
+                        pointRadius: 0, // Clean look, no points
+                        pointHoverRadius: 6
+                    }]
+                };
+                config.options = {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            backgroundColor: '#1f1f1f',
+                            titleColor: '#fff',
+                            bodyColor: '#fff',
+                            borderColor: 'rgba(255,255,255,0.1)',
+                            borderWidth: 1
+                        }
+                    },
+                    scales: {
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#666', font: { size: 12 } },
+                            border: { display: false }
+                        },
+                        y: {
+                            display: false, // Hide Y axis for minimalist look
+                            min: 0,
+                            max: 100
+                        }
+                    }
+                };
+            }
+
+            if (chartInstance) chartInstance.destroy();
+            chartInstance = new Chart(ctx, config);
+        }
+
+        loadAnalytics();
+    </script>
+</body>
+
+</html>

@@ -21,6 +21,9 @@ app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/prescriptions', require('./routes/prescriptionRoutes'));
 app.use('/api/medications', require('./routes/medicationRoutes'));
 app.use('/api/reminders', require('./routes/reminderRoutes'));
+app.use('/api/inventory', require('./routes/inventoryRoutes'));
+app.use('/api/analytics', require('./routes/analyticsRoutes'));
+app.use('/api/interactions', require('./routes/interactionsRoutes'));
 
 // Health check route
 app.get('/api/health', (req, res) => {

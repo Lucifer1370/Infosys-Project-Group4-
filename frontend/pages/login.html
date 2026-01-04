@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="../css/style.css">
 </head>
+
 <body>
   <div class="auth-container">
     <div class="auth-card">
@@ -66,9 +68,10 @@
     let currentRole = 'Patient';
 
     // Check if already logged in
-    if (getAuthToken() && getCurrentUser()) {
-      window.location.href = 'dashboard.html';
-    }
+    // Check if already logged in - disabled per user request
+    // if (getAuthToken() && getCurrentUser()) {
+    //   window.location.href = 'dashboard.html';
+    // }
 
     // Tab switching
     document.getElementById('signupTab').addEventListener('click', () => {
@@ -166,7 +169,7 @@
           // Store token and user with role
           localStorage.setItem('authToken', response.token);
           localStorage.setItem('currentUser', JSON.stringify(response.user));
-          
+
           // Redirect based on role
           window.location.href = 'dashboard.html';
         } else {
@@ -186,17 +189,17 @@
             password,
             role
           };
-          
+
           // Add Doctor-specific fields (MANDATORY)
           if (role === 'Doctor') {
             const license = document.getElementById('doctorLicense')?.value.trim();
             const spec = document.getElementById('specialization')?.value.trim();
-            
+
             if (!license || !spec) {
               showAlert('Medical License Number and Specialization are required for Doctor registration');
               return;
             }
-            
+
             registerData.medicalLicense = license;
             registerData.specialization = spec;
           }
@@ -214,7 +217,7 @@
             registerData.pharmacyLicenseNumber = pharmacyLicense;
             registerData.address = pharmacyAddress;
           }
-          
+
           const response = await apiCall('/auth/register', {
             method: 'POST',
             body: JSON.stringify(registerData)
@@ -223,7 +226,7 @@
           // Store token and user with role
           localStorage.setItem('authToken', response.token);
           localStorage.setItem('currentUser', JSON.stringify(response.user));
-          
+
           showSuccess('Sign up successful! Please login.');
           document.getElementById('loginTab').click();
         }
@@ -236,4 +239,5 @@
     renderExtraFields();
   </script>
 </body>
+
 </html>

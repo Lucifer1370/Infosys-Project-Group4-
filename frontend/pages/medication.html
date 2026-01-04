@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="../css/style.css">
 </head>
+
 <body>
   <div class="container">
     <div class="page-title">
@@ -64,9 +66,14 @@
 
     <!-- Medications List -->
     <div class="medications-section">
-      <h2 class="form-section-title">
-        <i class="fa-solid fa-list-check"></i> Your Medications
-      </h2>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 class="form-section-title" style="margin-bottom: 0;">
+          <i class="fa-solid fa-list-check"></i> Your Medications
+        </h2>
+        <button class="btn btn-secondary" onclick="checkInteractions()" style="padding: 8px 16px; font-size: 14px;">
+          <i class="fa-solid fa-triangle-exclamation"></i> Check Interactions
+        </button>
+      </div>
       <div id="medicationsList" class="medications-list"></div>
     </div>
   </div>
@@ -103,7 +110,7 @@
       showAlert('Access denied. Only patients can access the Medication Tracker.');
       window.location.href = 'dashboard.html';
     }
-    
+
     // Hide Reminders nav item for non-Patients (shouldn't reach here for non-Patients, but safety check)
     if (role !== 'Patient') {
       const remindersNav = document.getElementById('remindersNavItem');
@@ -207,8 +214,42 @@
       }
     }
 
+
+    // Check Interactions
+    async function checkInteractions() {
+      if (medications.length < 2) {
+        showAlert('You need at least 2 medications to check for interactions.', 'success');
+        return;
+      }
+
+      const medNames = medications.map(m => m.name);
+
+      try {
+        const response = await apiCall('/interactions/check', {
+          method: 'POST',
+          body: JSON.stringify({ medicines: medNames })
+        });
+
+        const interactions = response.data;
+
+        if (interactions.length === 0) {
+          showSuccess('No known interactions found between your medications.');
+        } else {
+          // Format alert message
+          let msg = '⚠️ Potential Interactions Found:\n\n';
+          interactions.forEach(i => {
+            msg += `• ${i.medicines.join(' + ')}: ${i.description} [${i.severity}]\n`;
+          });
+          alert(msg);
+        }
+      } catch (error) {
+        showAlert('Failed to check interactions');
+      }
+    }
+
     // Initialize
     loadMedications();
   </script>
 </body>
+
 </html>

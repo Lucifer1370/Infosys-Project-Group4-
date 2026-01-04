@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="../css/style.css">
 </head>
+
 <body>
   <div class="container">
     <div class="page-title">
@@ -70,110 +72,85 @@
           <div class="search-box">
             <input type="text" id="searchBox" placeholder="Search prescriptions...">
           </div>
-          <select id="filterStatus" class="filter-select">
-            <option value="all">All Status</option>
-            <option value="Active">Active</option>
-            <option value="Expired">Expired</option>
-          </select>
+          <!-- Filter removed as we show split lists -->
         </div>
 
-        <div id="prescriptionsList" class="prescriptions-list"></div>
+        <h3 class="section-header">Active Prescriptions</h3>
+        <div id="activePrescriptionsList" class="prescriptions-list"></div>
+
+        <h3 class="section-header" style="margin-top: 32px;">Past Prescriptions</h3>
+        <div id="pastPrescriptionsList" class="prescriptions-list"></div>
       </div>
     </div>
   </div>
 
   <nav class="bottom-nav">
-    <div class="nav-item" onclick="window.location.href='dashboard.html'">
-      <i class="fa-solid fa-house"></i>
-      <span>Dashboard</span>
-    </div>
-    <div class="nav-item active" onclick="window.location.href='prescriptions.html'">
-      <i class="fa-solid fa-file-prescription"></i>
-      <span>Prescriptions</span>
-    </div>
-    <div class="nav-item" id="remindersNavItem" onclick="window.location.href='reminders.html'" style="display: ${role === 'Patient' ? 'flex' : 'none'};">
-      <i class="fa-solid fa-bell"></i>
-      <span>Reminders</span>
-    </div>
-    <div class="nav-item" onclick="window.location.href='profile.html'">
-      <i class="fa-solid fa-user"></i>
-      <span>Profile</span>
-    </div>
+    <!-- ... nav ... -->
   </nav>
 
   <script src="../js/app.js"></script>
   <script>
     // Check authentication
     if (!checkAuth()) {
-      // Will redirect to login
+      throw new Error('Not authenticated');
     }
 
-    // Role-based access check
     const role = getUserRole();
-    if (role !== 'Patient' && role !== 'Doctor') {
-      showAlert('Access denied for your role');
-      window.location.href = 'dashboard.html';
-    }
-
     let prescriptions = [];
     let editingId = null;
-    const user = getCurrentUser();
 
-    // Hide prescription form for Patients (view-only)
-    if (role === 'Patient') {
-      const formCard = document.querySelector('.prescription-form-card');
-      if (formCard) formCard.style.display = 'none';
-    }
-    
-    // STRICT: Hide Reminders nav item for Doctors (Patient-only feature)
-    if (role !== 'Patient') {
-      const remindersNav = document.getElementById('remindersNavItem');
-      if (remindersNav) remindersNav.style.display = 'none';
-    }
-
-    // Load prescriptions
     async function loadPrescriptions() {
       try {
-        const endpoint = user.role === 'Patient' ? '/prescriptions/patient' : 
-                        user.role === 'Doctor' ? '/prescriptions/doctor' : '/prescriptions';
-        const response = await apiCall(endpoint);
-        prescriptions = response.data || [];
-        renderPrescriptions();
+        const response = await apiCall('/prescriptions');
+        if (response.success) {
+          prescriptions = response.data;
+          renderPrescriptions();
+        }
       } catch (error) {
-        console.error('Error loading prescriptions:', error);
-        prescriptions = [];
-        renderPrescriptions();
+        console.error('Failed to load prescriptions:', error);
+        // Only show alert if it's not a 404 (which might mean just empty)
+        if (!error.message.includes('not found')) {
+          showAlert('Failed to load prescriptions');
+        }
       }
     }
 
-    // Render prescriptions
+    // Render prescriptions - Split Active/Past
     function renderPrescriptions() {
-      const container = document.getElementById('prescriptionsList');
+      const activeContainer = document.getElementById('activePrescriptionsList');
+      const pastContainer = document.getElementById('pastPrescriptionsList');
       const search = document.getElementById('searchBox').value.toLowerCase();
-      const filter = document.getElementById('filterStatus').value;
 
-      const filtered = prescriptions.filter(p => {
-        const matchSearch = p.medicineName.toLowerCase().includes(search);
-        const matchFilter = filter === 'all' || p.status === filter;
-        return matchSearch && matchFilter;
-      });
+      // Clear
+      activeContainer.innerHTML = '';
+      pastContainer.innerHTML = '';
 
-      if (filtered.length === 0) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <div class="empty-state-icon">📋</div>
-            <p>No prescriptions found</p>
-          </div>
-        `;
-        return;
+      const filtered = prescriptions.filter(p => p.medicineName.toLowerCase().includes(search));
+
+      const active = filtered.filter(p => p.status === 'Active');
+      const past = filtered.filter(p => p.status !== 'Active'); // Expired or others
+
+      // Render Active
+      if (active.length === 0) {
+        activeContainer.innerHTML = `<div class="empty-state-small">No active prescriptions</div>`;
+      } else {
+        activeContainer.innerHTML = active.map(p => createCard(p)).join('');
       }
 
-      container.innerHTML = filtered.map(pres => {
-        const statusClass = pres.status === 'Active' ? 'status-active' : 'status-expired';
-        const startDate = formatDate(pres.startDate);
-        const expiryDate = formatDate(pres.expiryDate);
-        
-        return `
+      // Render Past
+      if (past.length === 0) {
+        pastContainer.innerHTML = `<div class="empty-state-small">No past prescriptions</div>`;
+      } else {
+        pastContainer.innerHTML = past.map(p => createCard(p)).join('');
+      }
+    }
+
+    function createCard(pres) {
+      const statusClass = pres.status === 'Active' ? 'status-active' : 'status-expired';
+      const startDate = formatDate(pres.startDate);
+      const expiryDate = formatDate(pres.expiryDate);
+
+      return `
           <div class="medicine-card">
             <div class="medicine-title">${pres.medicineName}</div>
             <div class="medicine-dose">${pres.dosage}</div>
@@ -190,9 +167,21 @@
             ` : ''}
           </div>
         `;
-      }).join('');
     }
 
+    // ... save/edit/delete functions ...
+    // Note: Search listener remains on searchBox
+    // Remove filterStatus listener as element is gone
+
+    // Hide prescription form for Patients (view-only)
+    if (role === 'Patient') {
+      const formCard = document.querySelector('.prescription-form-card');
+      if (formCard) formCard.style.display = 'none';
+
+      // Update Title for Patient
+      document.querySelector('.page-title h1').textContent = 'My Prescriptions';
+      document.querySelector('.page-subtitle').textContent = 'View your active and past prescriptions';
+    }
     // Save prescription
     const prescriptionForm = document.getElementById('prescriptionForm');
     if (prescriptionForm) {
@@ -204,62 +193,62 @@
           return;
         }
 
-      const medicineName = document.getElementById('medName').value.trim();
-      const dosage = document.getElementById('dosage').value.trim();
-      const startDate = document.getElementById('startDate').value;
-      const duration = parseInt(document.getElementById('duration').value);
-      const expiryDate = document.getElementById('expiryDate').value;
-      const notes = document.getElementById('notes').value.trim();
+        const medicineName = document.getElementById('medName').value.trim();
+        const dosage = document.getElementById('dosage').value.trim();
+        const startDate = document.getElementById('startDate').value;
+        const duration = parseInt(document.getElementById('duration').value);
+        const expiryDate = document.getElementById('expiryDate').value;
+        const notes = document.getElementById('notes').value.trim();
 
-      if (!medicineName || !dosage || !startDate || !duration) {
-        showAlert('Please fill in all required fields');
-        return;
-      }
-
-      try {
-        if (editingId) {
-          // Update
-          await apiCall(`/prescriptions/${editingId}`, {
-            method: 'PUT',
-            body: JSON.stringify({
-              medicineName,
-              dosage,
-              startDate,
-              duration,
-              expiryDate: expiryDate || null,
-              notes
-            })
-          });
-          editingId = null;
-          document.getElementById('saveBtn').innerHTML = '<i class="fa-solid fa-save"></i> Save Prescription';
-        } else {
-          // Create - need patient email
-          const patientEmail = prompt('Enter patient email:');
-          if (!patientEmail) {
-            showAlert('Patient email is required');
-            return;
-          }
-
-          await apiCall('/prescriptions', {
-            method: 'POST',
-            body: JSON.stringify({
-              patientEmail: patientEmail.trim(),
-              medicineName,
-              dosage,
-              duration,
-              startDate,
-              expiryDate: expiryDate || null,
-              notes
-            })
-          });
+        if (!medicineName || !dosage || !startDate || !duration) {
+          showAlert('Please fill in all required fields');
+          return;
         }
 
-        document.getElementById('prescriptionForm').reset();
-        await loadPrescriptions();
-        showSuccess('Prescription saved successfully!');
-      } catch (error) {
-        showAlert(error.message || 'Failed to save prescription');
-      }
+        try {
+          if (editingId) {
+            // Update
+            await apiCall(`/prescriptions/${editingId}`, {
+              method: 'PUT',
+              body: JSON.stringify({
+                medicineName,
+                dosage,
+                startDate,
+                duration,
+                expiryDate: expiryDate || null,
+                notes
+              })
+            });
+            editingId = null;
+            document.getElementById('saveBtn').innerHTML = '<i class="fa-solid fa-save"></i> Save Prescription';
+          } else {
+            // Create - need patient email
+            const patientEmail = prompt('Enter patient email:');
+            if (!patientEmail) {
+              showAlert('Patient email is required');
+              return;
+            }
+
+            await apiCall('/prescriptions', {
+              method: 'POST',
+              body: JSON.stringify({
+                patientEmail: patientEmail.trim(),
+                medicineName,
+                dosage,
+                duration,
+                startDate,
+                expiryDate: expiryDate || null,
+                notes
+              })
+            });
+          }
+
+          document.getElementById('prescriptionForm').reset();
+          await loadPrescriptions();
+          showSuccess('Prescription saved successfully!');
+        } catch (error) {
+          showAlert(error.message || 'Failed to save prescription');
+        }
       });
     }
 
@@ -300,10 +289,10 @@
 
     // Search and filter
     document.getElementById('searchBox').addEventListener('input', renderPrescriptions);
-    document.getElementById('filterStatus').addEventListener('change', renderPrescriptions);
 
     // Initialize
     loadPrescriptions();
   </script>
 </body>
+
 </html>

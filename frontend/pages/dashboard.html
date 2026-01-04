@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <link rel="stylesheet" href="../css/style.css">
 </head>
+
 <body>
   <div class="container">
     <div class="page-title">
@@ -39,6 +41,24 @@
         <p>Today's medication reminders</p>
       </div>
 
+      <div class="dashboard-card" onclick="window.location.href='inventory.html'" id="inventoryCard"
+        style="display: none;">
+        <div class="dashboard-icon">
+          <i class="fa-solid fa-boxes-stacked"></i>
+        </div>
+        <h3>Inventory</h3>
+        <p>Manage medicine stock</p>
+      </div>
+
+
+      <div class="dashboard-card" onclick="window.location.href='analytics.html'">
+        <div class="dashboard-icon">
+          <i class="fa-solid fa-chart-line"></i>
+        </div>
+        <h3>Analytics</h3>
+        <p>Reports & Insights</p>
+      </div>
+
       <div class="dashboard-card" onclick="window.location.href='profile.html'">
         <div class="dashboard-icon">
           <i class="fa-solid fa-user"></i>
@@ -48,6 +68,7 @@
       </div>
     </div>
   </div>
+
 
   <nav class="bottom-nav">
     <div class="nav-item active" onclick="window.location.href='dashboard.html'">
@@ -61,6 +82,15 @@
     <div class="nav-item" onclick="window.location.href='reminders.html'">
       <i class="fa-solid fa-bell"></i>
       <span>Reminders</span>
+    </div>
+    <div class="nav-item" onclick="window.location.href='inventory.html'" id="inventoryNav" style="display: none;">
+      <i class="fa-solid fa-boxes-stacked"></i>
+      <span>Inventory</span>
+    </div>
+
+    <div class="nav-item" onclick="window.location.href='analytics.html'">
+      <i class="fa-solid fa-chart-line"></i>
+      <span>Analytics</span>
     </div>
     <div class="nav-item" onclick="window.location.href='profile.html'">
       <i class="fa-solid fa-user"></i>
@@ -77,30 +107,78 @@
 
     // STRICT Role-based UI visibility
     const role = getUserRole();
-    
-    // Hide Medication Tracker and Reminders for Doctors (Patient-only features)
-    if (role === 'Doctor') {
-      // Hide Medication Tracker card
-      const medicationCard = document.querySelector('.dashboard-card:nth-child(2)');
-      if (medicationCard) medicationCard.style.display = 'none';
-      
-      // Hide Reminders card
-      const remindersCard = document.querySelector('.dashboard-card:nth-child(3)');
-      if (remindersCard) remindersCard.style.display = 'none';
-      
-      // Hide Reminders from bottom navigation
-      const navItems = document.querySelectorAll('.nav-item');
-      if (navItems.length > 2) {
-        navItems[2].style.display = 'none'; // Reminders nav item
-      }
-    }
-    
-    // Only show Reminders for Patients
-    if (role !== 'Patient') {
-      const remindersNav = Array.from(document.querySelectorAll('.nav-item')).find(item => 
-        item.textContent.includes('Reminders')
-      );
-      if (remindersNav) remindersNav.style.display = 'none';
+
+    // Get all cards and nav items
+    const cards = {
+      prescriptions: document.querySelector('.dashboard-card:nth-child(1)'),
+      medications: document.querySelector('.dashboard-card:nth-child(2)'),
+      reminders: document.querySelector('.dashboard-card:nth-child(3)'),
+      inventory: document.getElementById('inventoryCard'),
+      analytics: document.querySelector('.dashboard-card:nth-child(5)'),
+      profile: document.querySelector('.dashboard-card:nth-child(6)')
+    };
+
+    const navItems = {
+      dashboard: document.querySelector('.nav-item:nth-child(1)'),
+      prescriptions: document.querySelector('.nav-item:nth-child(2)'),
+      reminders: document.querySelector('.nav-item:nth-child(3)'),
+      inventory: document.getElementById('inventoryNav'),
+      analytics: document.querySelector('.nav-item:nth-child(5)'), // Adjusted index due to dynamic inventory nav
+      profile: document.querySelector('.nav-item:nth-child(6)')
+    };
+
+    // Note on Nav indices: Since Inventory is hardcoded but hidden, indices [1..6] are fairly stable.
+    // However, robust selection (like ID or text content) is better.
+    // Let's ensure we are selecting correct elements by cleaning up selection if needed, 
+    // but for now, we follow the DOM structure.
+
+    // helper to hide all specific ones first? No, default is visible except Inventory.
+    // Let's enforce per role.
+
+    switch (role) {
+      case 'Patient':
+        // Patient sees: Prescriptions, Medications, Reminders, Analytics, Profile
+        // Hide: Inventory
+        if (cards.inventory) cards.inventory.style.display = 'none';
+        if (navItems.inventory) navItems.inventory.style.display = 'none';
+
+        // Ensure others are visible (restoring defaults)
+        if (cards.medications) cards.medications.style.display = 'block';
+        if (cards.reminders) cards.reminders.style.display = 'block';
+        if (navItems.reminders) navItems.reminders.style.display = 'flex';
+        break;
+
+      case 'Doctor':
+        // Doctor sees: Prescriptions, Analytics, Profile
+        // Hide: Medications, Reminders, Inventory
+        if (cards.medications) cards.medications.style.display = 'none';
+        if (cards.reminders) cards.reminders.style.display = 'none';
+        if (cards.inventory) cards.inventory.style.display = 'none';
+
+        if (navItems.reminders) navItems.reminders.style.display = 'none';
+        if (navItems.inventory) navItems.inventory.style.display = 'none';
+        break;
+
+      case 'Pharmacist':
+        // Pharmacist sees: Inventory, Prescriptions, Analytics, Profile
+        // Hide: Medications, Reminders
+        if (cards.inventory) cards.inventory.style.display = 'block'; // SHOW
+        if (navItems.inventory) navItems.inventory.style.display = 'flex'; // SHOW
+
+        if (cards.medications) cards.medications.style.display = 'none';
+        if (cards.reminders) cards.reminders.style.display = 'none';
+        if (navItems.reminders) navItems.reminders.style.display = 'none';
+        break;
+
+      case 'Admin':
+        // Admin sees: EVERYTHING
+        if (cards.inventory) cards.inventory.style.display = 'block';
+        if (navItems.inventory) navItems.inventory.style.display = 'flex';
+
+        if (cards.medications) cards.medications.style.display = 'block';
+        if (cards.reminders) cards.reminders.style.display = 'block';
+        if (navItems.reminders) navItems.reminders.style.display = 'flex';
+        break;
     }
 
     // Set active nav item
@@ -110,4 +188,5 @@
     document.querySelector('.nav-item').classList.add('active');
   </script>
 </body>
+
 </html>
